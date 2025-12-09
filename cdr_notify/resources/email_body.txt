@@ -1,0 +1,10 @@
+Dear Support,
+
+A new CDR file has been detected in the CDR folder.
+
+File name: {filename}
+
+This notification was generated automatically by the pond_cdr_notify service.
+
+Best regards,
+cdr_notify
