@@ -96,7 +96,7 @@ def get_hash(file_hash: str) -> Optional[sqlite3.Row]:
 def set_hash(filename: str, status: FileStatus) -> int:
     """
     Accept a file path, calculate its content hash and add it to the database.
-    Only the filename (basename) is stored in the database.
+    Only the basename is stored in the database.
     Returns the inserted record id.
     """
     file_hash = calculate_hash(filename)
@@ -115,9 +115,11 @@ def update_status(file_hash: str, status: FileStatus) -> bool:
 # Email helper
 # ---------------------------------------------------------------------------
 
-def send_email(filename: str) -> bool:
+def send_email(filename: str, file_hash: str) -> bool:
     """
-    Accept a file path and send an email with the file attached.
+    Accept a file path and its hash, fetch DB metadata,
+    and send an email with the file attached.
+    The email body includes the timestamp when the file was stored in DB.
     Return True on success, False on failure.
     """
     smtp_user = os.getenv("SMTP_USERNAME", "")
@@ -129,7 +131,18 @@ def send_email(filename: str) -> bool:
     subject_template = _read_resource("email_subject.txt")
     body_template = _read_resource("email_body.txt")
 
-    context = {"filename": basename}
+    # Fetch record to get "changed" timestamp
+    record = database.fetch_by_hash(file_hash)
+    if not record:
+        raise RuntimeError(f"No DB record found for hash: {file_hash}")
+
+    changed = record["changed"]
+
+    context = {
+        "filename": basename,
+        "changed": changed,
+    }
+
     subject = subject_template.format(**context).strip()
     body = body_template.format(**context)
 

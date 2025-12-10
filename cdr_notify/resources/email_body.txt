@@ -1,10 +1,11 @@
-Dear Support,
+Dear Support Team,
 
-A new CDR file has been detected in the CDR folder.
+A new CDR file has been arrived to Pond server.
 
 File name: {filename}
+Received at: {changed}
 
-This notification was generated automatically by the pond_cdr_notify service.
+This notification was generated automatically by the Pond cdr_notify service.
 
 Best regards,
-cdr_notify
+

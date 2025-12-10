@@ -29,7 +29,6 @@ def process_cdr_folder() -> None:
         filename = entry.name
         full_path = str(entry)
 
-        # Hash is based on file content
         try:
             file_hash = utils.calculate_hash(full_path)
         except Exception:
@@ -56,7 +55,7 @@ def process_cdr_folder() -> None:
 
         email_sent = False
         try:
-            email_sent = utils.send_email(full_path)
+            email_sent = utils.send_email(full_path, file_hash)
         except Exception:
             logging.exception("Failed to send email for '%s'", filename)
 
