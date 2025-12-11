@@ -53,7 +53,11 @@ def send_email(filepath: str, file_hash: str) -> bool:
         msg["From"] = "noreply@example.com"
         msg["To"] = "test@example.com"
 
-        msg.set_content("A new CDR file has been arrived to the server.")
+        msg.set_content(
+            "A new CDR file has been received by the server.\n"
+            f"File: {os.path.basename(filepath)}\n"
+            f"Hash: {file_hash}\n"
+        )
 
         mime_type, _ = mimetypes.guess_type(filepath)
         if mime_type is None:
@@ -73,7 +77,6 @@ def send_email(filepath: str, file_hash: str) -> bool:
         server = smtplib.SMTP("localhost", 1026)
         server.send_message(msg)
         server.quit()
-
         return True
 
     except Exception:
