@@ -1,9 +1,10 @@
 Dear Support Team,
 
-A new CDR file has been arrived to Pond server.
+A new CDR file has arrived on the Pond server.
 
-File name: {filename}
-Received at: {changed}
+File: {filename}
+Created at: {changed}
+
 
 This notification was generated automatically by the Pond cdr_notify service.
 

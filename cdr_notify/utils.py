@@ -1,193 +1,81 @@
-from enum import Enum
 import hashlib
 import logging
+import mimetypes
 import os
 import smtplib
-import sqlite3
-from email.mime.application import MIMEApplication
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
-from pathlib import Path
-from typing import Optional
-
+from email.message import EmailMessage
+from enum import Enum
 import database
 
 
-# Hash length in hex characters; 64 = full SHA-256
-HASH_LENGTH: int = 64
-
-# SMTP and notification configuration (constants as requested)
-SMTP_SERVER: str = "localhost"
-SMTP_PORT: int = 1026
-SMTP_FROM: str = "test@example.com"
-EMAIL_TO_SEND: str = "test@example.com"
-SMTP_USE_TLS: bool = False
-SMTP_USE_SSL: bool = False
-
-
-
-BASE_DIR: Path = Path(__file__).resolve().parent
-RESOURCES_DIR: Path = BASE_DIR / "resources"
-
-
 class FileStatus(Enum):
-    ARRIVED = "Arrived"
-    SENT = "Sent"
-    DELIVERED = "Delivered"
-    REMOVED = "Removed"
+    ARRIVED = "ARRIVED"
+    SENT = "SENT"
 
 
-# Template helpers
-# ---------------------------------------------------------------------------
-
-def _read_resource(name: str) -> str:
-    """
-    Read a text file from the resources directory.
-
-    Raises:
-        FileNotFoundError if the file does not exist.
-        RuntimeError for any I/O error during reading.
-    """
-    path = RESOURCES_DIR / name
-    if not path.is_file():
-        message = f"Resource file not found: {path}"
-        logging.error(message)
-        raise FileNotFoundError(message)
-
+def calculate_hash(path: str) -> str:
     try:
-        return path.read_text(encoding="utf-8")
-    except OSError as e:
-        logging.exception("Failed to read resource file '%s': %s", path, e)
-        raise RuntimeError(f"Failed to read resource file: {path}") from e
+        with open(path, "rb") as f:
+            return hashlib.sha256(f.read()).hexdigest()
+    except Exception:
+        logging.exception("Failed to calculate hash for %s", path)
+        return ""
 
 
-# Hash helpers
-# ---------------------------------------------------------------------------
-
-def calculate_hash(filename: str) -> str:
-    """
-    Accept a file path and return a deterministic SHA-256 hash of its content.
-    """
-    path = Path(filename)
-    if not path.is_file():
-        raise FileNotFoundError(f"File not found for hashing: {path}")
-
-    sha256 = hashlib.sha256()
-
-    with path.open("rb") as f:
-        for chunk in iter(lambda: f.read(8192), b""):
-            sha256.update(chunk)
-
-    digest = sha256.hexdigest()
-    return digest[:HASH_LENGTH] if HASH_LENGTH > 0 else digest
+def get_hash(file_hash: str) -> bool:
+    try:
+        return database.get_file_by_hash(file_hash) is not None
+    except Exception:
+        logging.exception("Database read error")
+        return False
 
 
-# ---------------------------------------------------------------------------
-# Database-related helpers
-# ---------------------------------------------------------------------------
-
-def get_hash(file_hash: str) -> Optional[sqlite3.Row]:
-    """
-    Accept a hash and return the corresponding row from the database.
-    """
-    return database.fetch_by_hash(file_hash)
-
-
-def set_hash(filename: str, status: FileStatus) -> int:
-    """
-    Accept a file path, calculate its content hash and add it to the database.
-    Only the basename is stored in the database.
-    Returns the inserted record id.
-    """
-    file_hash = calculate_hash(filename)
-    basename = Path(filename).name
-    return database.insert_record(basename, file_hash, status.value)
+def set_hash(filename: str, file_hash: str, status: FileStatus) -> bool:
+    try:
+        return database.insert_file(filename, file_hash, status.value)
+    except Exception:
+        logging.exception("Database insert error")
+        return False
 
 
 def update_status(file_hash: str, status: FileStatus) -> bool:
-    """
-    Accept a hash and a new status. Return True on success.
-    """
-    return database.update_status(file_hash, status.value)
-
-
-# ---------------------------------------------------------------------------
-# Email helper
-# ---------------------------------------------------------------------------
-
-def send_email(filename: str, file_hash: str) -> bool:
-    """
-    Accept a file path and its hash, fetch DB metadata,
-    and send an email with the file attached.
-    The email body includes the timestamp when the file was stored in DB.
-    Return True on success, False on failure.
-    """
-    smtp_user = os.getenv("SMTP_USERNAME", "")
-    smtp_pass = os.getenv("SMTP_PASSWORD", "")
-
-    basename = Path(filename).name
-
-    # Load templates; errors must stop the application
-    subject_template = _read_resource("email_subject.txt")
-    body_template = _read_resource("email_body.txt")
-
-    # Fetch record to get "changed" timestamp
-    record = database.fetch_by_hash(file_hash)
-    if not record:
-        raise RuntimeError(f"No DB record found for hash: {file_hash}")
-
-    changed = record["changed"]
-
-    context = {
-        "filename": basename,
-        "changed": changed,
-    }
-
-    subject = subject_template.format(**context).strip()
-    body = body_template.format(**context)
-
-    msg = MIMEMultipart()
-    msg["Subject"] = subject
-    msg["From"] = SMTP_FROM
-    msg["To"] = EMAIL_TO_SEND
-    msg.attach(MIMEText(body, _charset="utf-8"))
-
-    # Attach file if it exists
-    path = Path(filename)
-    if path.is_file():
-        try:
-            with path.open("rb") as f:
-                part = MIMEApplication(f.read(), Name=path.name)
-            part["Content-Disposition"] = f'attachment; filename="{path.name}"'
-            msg.attach(part)
-        except OSError as e:
-            logging.warning("Failed to attach file '%s': %s", filename, e)
-
-    logging.info(
-        "Sending email about file '%s' to '%s' via %s:%s",
-        basename,
-        EMAIL_TO_SEND,
-        SMTP_SERVER,
-        SMTP_PORT,
-    )
-
     try:
-        if SMTP_USE_SSL:
-            server = smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT, timeout=30)
+        return database.update_status(file_hash, status.value)
+    except Exception:
+        logging.exception("Database update error")
+        return False
+
+
+def send_email(filepath: str, file_hash: str) -> bool:
+    try:
+        msg = EmailMessage()
+        msg["Subject"] = "New CDR File Arrived"
+        msg["From"] = "noreply@example.com"
+        msg["To"] = "test@example.com"
+
+        msg.set_content("A new CDR file has been arrived to the server.")
+
+        mime_type, _ = mimetypes.guess_type(filepath)
+        if mime_type is None:
+            maintype = "application"
+            subtype = "octet-stream"
         else:
-            server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=30)
+            maintype, subtype = mime_type.split("/", 1)
 
-        with server:
-            server.ehlo()
-            if SMTP_USE_TLS and not SMTP_USE_SSL:
-                server.starttls()
-                server.ehlo()
-            if smtp_user and smtp_pass:
-                server.login(smtp_user, smtp_pass)
-            server.send_message(msg)
+        with open(filepath, "rb") as f:
+            msg.add_attachment(
+                f.read(),
+                maintype=maintype,
+                subtype=subtype,
+                filename=os.path.basename(filepath)
+            )
 
-        logging.info("Email sent successfully for file '%s'", basename)
+        server = smtplib.SMTP("localhost", 1026)
+        server.send_message(msg)
+        server.quit()
+
         return True
-    except Exception as e:
-        logging.exception("Failed to send email for file '%s': %s", basename, e)
+
+    except Exception:
+        logging.exception("Failed to send email for hash %s", file_hash)
         return False
