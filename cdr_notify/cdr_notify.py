@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 import logging
 import os
 from pathlib import Path
@@ -7,8 +5,11 @@ from pathlib import Path
 import database
 import utils
 
+CDR_FOLDER: str = "/Users/tolibzhonkhalikov/CDR_Files"
 
-CDR_FOLDER: str = os.getenv("CDR_FOLDER", "")
+# Validate the folder path
+if not CDR_FOLDER or not Path(CDR_FOLDER).exists():
+    raise RuntimeError(f"CDR_FOLDER does not exist: {CDR_FOLDER}")
 
 
 def process_cdr_folder() -> None:
@@ -21,7 +22,7 @@ def process_cdr_folder() -> None:
         raise RuntimeError(f"Invalid CDR_FOLDER path: {folder}")
 
     logging.info("Scanning CDR folder: %s", folder)
-
+    logging.info("Folder content: %s", [p.name for p in folder.iterdir()])
     for entry in sorted(folder.iterdir()):
         if not entry.is_file():
             continue

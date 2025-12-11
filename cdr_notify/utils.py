@@ -17,12 +17,14 @@ import database
 HASH_LENGTH: int = 64
 
 # SMTP and notification configuration (constants as requested)
-SMTP_SERVER: str = "smtp.example.com"
-SMTP_PORT: int = 587
-SMTP_FROM: str = "alerts@example.com"
-EMAIL_TO_SEND: str = "alerts@example.com"
-SMTP_USE_TLS: bool = True
+SMTP_SERVER: str = "localhost"
+SMTP_PORT: int = 1026
+SMTP_FROM: str = "test@example.com"
+EMAIL_TO_SEND: str = "test@example.com"
+SMTP_USE_TLS: bool = False
 SMTP_USE_SSL: bool = False
+
+
 
 BASE_DIR: Path = Path(__file__).resolve().parent
 RESOURCES_DIR: Path = BASE_DIR / "resources"
@@ -35,7 +37,6 @@ class FileStatus(Enum):
     REMOVED = "Removed"
 
 
-# ---------------------------------------------------------------------------
 # Template helpers
 # ---------------------------------------------------------------------------
 
@@ -60,7 +61,6 @@ def _read_resource(name: str) -> str:
         raise RuntimeError(f"Failed to read resource file: {path}") from e
 
 
-# ---------------------------------------------------------------------------
 # Hash helpers
 # ---------------------------------------------------------------------------
 
