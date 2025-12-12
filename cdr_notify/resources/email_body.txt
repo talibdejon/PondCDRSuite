@@ -1,6 +1,6 @@
 Dear Support Team,
 
-A new CDR file has arrived on the Pond server.
+A new CDR file has been arrived to the Pond server. You are subscribed to get a notfication about this.
 
 File: {filename}
 Created at: {changed}
