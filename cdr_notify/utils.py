@@ -5,7 +5,9 @@ import os
 import smtplib
 from email.message import EmailMessage
 from enum import Enum
+
 import database
+from config import SMTP_HOST, SMTP_PORT, EMAIL_FROM, EMAIL_TO_SEND
 
 
 class FileStatus(Enum):
@@ -14,12 +16,8 @@ class FileStatus(Enum):
 
 
 def calculate_hash(path: str) -> str:
-    try:
-        with open(path, "rb") as f:
-            return hashlib.sha256(f.read()).hexdigest()
-    except Exception:
-        logging.exception("Failed to calculate hash for %s", path)
-        return ""
+    with open(path, "rb") as f:
+        return hashlib.sha256(f.read()).hexdigest()
 
 
 def get_hash(file_hash: str) -> bool:
@@ -46,39 +44,37 @@ def update_status(file_hash: str, status: FileStatus) -> bool:
         return False
 
 
-def send_email(filepath: str, file_hash: str) -> bool:
+def send_email(filepath: str, filename: str) -> bool:
     try:
         msg = EmailMessage()
-        msg["Subject"] = "New CDR File Arrived"
-        msg["From"] = "noreply@example.com"
-        msg["To"] = "test@example.com"
+        msg["Subject"] = f"New CDR file received: {filename}"
+        msg["From"] = EMAIL_FROM
+        msg["To"] = EMAIL_TO_SEND
 
         msg.set_content(
-            "A new CDR file has been received by the server.\n"
-            f"File: {os.path.basename(filepath)}\n"
-            f"Hash: {file_hash}\n"
+            "A new CDR file has been received.\n"
+            f"File: {filename}\n"
         )
 
         mime_type, _ = mimetypes.guess_type(filepath)
-        if mime_type is None:
-            maintype = "application"
-            subtype = "octet-stream"
-        else:
+        if mime_type:
             maintype, subtype = mime_type.split("/", 1)
+        else:
+            maintype, subtype = "application", "octet-stream"
 
         with open(filepath, "rb") as f:
             msg.add_attachment(
                 f.read(),
                 maintype=maintype,
                 subtype=subtype,
-                filename=os.path.basename(filepath)
+                filename=filename,
             )
 
-        server = smtplib.SMTP("localhost", 1026)
-        server.send_message(msg)
-        server.quit()
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+            server.send_message(msg)
+
         return True
 
     except Exception:
-        logging.exception("Failed to send email for hash %s", file_hash)
+        logging.exception("Failed to send email for file %s", filename)
         return False
