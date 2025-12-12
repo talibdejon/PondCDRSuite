@@ -1,53 +1,46 @@
-import os
 import logging
-import database
-import utils
+import os
+import time
 
-CDR_FOLDER = ""
+import utils
+from config import WATCH_DIR, CHECK_INTERVAL
 
 
 def main() -> None:
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(message)s"
-    )
+    logging.info("Starting CDR notify service")
+    logging.info("Watching directory: %s", WATCH_DIR)
 
-    logging.info("Starting cdr_notify")
-
-    if not os.path.isdir(CDR_FOLDER):
-        logging.error("Folder does not exist: %s", CDR_FOLDER)
-        return
-
-    logging.info("Scanning folder: %s", CDR_FOLDER)
-
-    database.init_db()
-
-    files = [f for f in os.listdir(CDR_FOLDER)]
-    logging.info("Files detected: %s", files)
-
-    for filename in files:
-        full_path = os.path.join(CDR_FOLDER, filename)
-
-        if not os.path.isfile(full_path):
+    while True:
+        try:
+            files = os.listdir(WATCH_DIR)
+        except Exception:
+            logging.exception("Failed to list directory %s", WATCH_DIR)
+            time.sleep(CHECK_INTERVAL)
             continue
 
-        file_hash = utils.calculate_hash(full_path)
-        if not file_hash:
-            continue
+        for filename in files:
+            full_path = os.path.join(WATCH_DIR, filename)
 
-        if utils.get_hash(file_hash):
-            logging.info("Already processed: %s", filename)
-            continue
+            if not os.path.isfile(full_path):
+                continue
 
-        logging.info("New file detected: %s", filename)
+            try:
+                file_hash = utils.calculate_hash(full_path)
+            except Exception:
+                logging.exception("Failed to calculate hash for %s", full_path)
+                continue
 
-        utils.set_hash(filename, file_hash, utils.FileStatus.ARRIVED)
+            if utils.get_hash(file_hash):
+                continue
 
-        if utils.send_email(full_path, file_hash):
-            utils.update_status(file_hash, utils.FileStatus.SENT)
-            logging.info("Status updated to SENT for %s", filename)
+            if not utils.send_email(full_path):
+                logging.error("Failed to send email for %s", full_path)
+                continue
 
-    logging.info("cdr_notify finished")
+            utils.set_hash(filename, file_hash, utils.FileStatus.SENT)
+            logging.info("File processed successfully: %s", filename)
+
+        time.sleep(CHECK_INTERVAL)
 
 
 if __name__ == "__main__":
