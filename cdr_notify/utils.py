@@ -3,8 +3,11 @@ import logging
 import mimetypes
 import os
 import smtplib
+from datetime import datetime
 from email.message import EmailMessage
 from enum import Enum
+from pathlib import Path
+from typing import List, Optional
 
 import database
 
@@ -14,9 +17,51 @@ class FileStatus(Enum):
     SENT = "SENT"
 
 
-def calculate_hash(path: str) -> str:
-    with open(path, "rb") as f:
-        return hashlib.sha256(f.read()).hexdigest()
+def get_files(cdr_folder: str) -> List[str]:
+    cdr_folder = (cdr_folder or "").strip()
+    if not cdr_folder:
+        raise RuntimeError("CDR_FOLDER is not set")
+
+    folder = Path(cdr_folder)
+    if not folder.exists():
+        raise RuntimeError(f"CDR_FOLDER does not exist: {cdr_folder}")
+    if not folder.is_dir():
+        raise RuntimeError(f"CDR_FOLDER is not a directory: {cdr_folder}")
+
+    logging.info("Scanning folder: %s", cdr_folder)
+
+    try:
+        names = os.listdir(cdr_folder)
+    except Exception:
+        logging.exception("Failed to list directory %s", cdr_folder)
+        raise
+
+    result: List[str] = []
+    for name in names:
+        if name.startswith("."):
+            continue
+
+        full_path = folder / name
+        if not full_path.is_file():
+            continue
+
+        result.append(str(full_path))
+
+    return result
+
+
+def calculate_hash(path: str) -> Optional[str]:
+    try:
+        file_path = Path(path)
+        if not file_path.is_file():
+            return None
+
+        with open(file_path, "rb") as f:
+            return hashlib.sha256(f.read()).hexdigest()
+
+    except Exception:
+        logging.exception("Failed to calculate hash for %s", path)
+        return None
 
 
 def get_hash(file_hash: str) -> bool:
@@ -43,8 +88,11 @@ def update_status(file_hash: str, status: FileStatus) -> bool:
         return False
 
 
-def send_email(filepath: str, filename: str) -> bool:
+def send_email(filepath: str) -> bool:
     try:
+        file_path = Path(filepath)
+        filename = file_path.name
+
         smtp_host = os.environ.get("SMTP_HOST", "").strip()
         smtp_port = int(os.environ.get("SMTP_PORT", "587"))
         smtp_user = os.environ.get("SMTP_USER", "").strip()
@@ -60,23 +108,29 @@ def send_email(filepath: str, filename: str) -> bool:
         if not email_to:
             raise RuntimeError("EMAIL_TO_SEND is not set")
 
-        msg = EmailMessage()
-        msg["Subject"] = f"New CDR file received: {filename}"
-        msg["From"] = email_from
-        msg["To"] = email_to
+        resources_dir = Path(__file__).parent / "resources"
+        subject_template = (resources_dir / "email_subject.txt").read_text().strip()
+        body_template = (resources_dir / "email_body.txt").read_text()
 
-        msg.set_content(
-            "A new CDR file has been received.\n"
-            f"File: {filename}\n"
+        changed_ts = datetime.fromtimestamp(file_path.stat().st_mtime).strftime(
+            "%Y-%m-%d %H:%M:%S"
         )
 
-        mime_type, _ = mimetypes.guess_type(filepath)
-        if mime_type:
-            maintype, subtype = mime_type.split("/", 1)
-        else:
-            maintype, subtype = "application", "octet-stream"
+        subject = subject_template.format(filename=filename)
+        body = body_template.format(filename=filename, changed=changed_ts)
 
-        with open(filepath, "rb") as f:
+        msg = EmailMessage()
+        msg["Subject"] = subject
+        msg["From"] = email_from
+        msg["To"] = email_to
+        msg.set_content(body)
+
+        mime_type, _ = mimetypes.guess_type(str(file_path))
+        maintype, subtype = (
+            mime_type.split("/", 1) if mime_type else ("application", "octet-stream")
+        )
+
+        with open(file_path, "rb") as f:
             msg.add_attachment(
                 f.read(),
                 maintype=maintype,
@@ -96,5 +150,5 @@ def send_email(filepath: str, filename: str) -> bool:
         return True
 
     except Exception:
-        logging.exception("Failed to send email for file %s", filename)
+        logging.exception("Failed to send email for file %s", filepath)
         return False

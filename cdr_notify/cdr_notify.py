@@ -1,4 +1,5 @@
 import logging
+import os
 import sys
 
 import database
@@ -11,31 +12,31 @@ def main() -> int:
         format="%(asctime)s %(levelname)s %(message)s",
     )
 
+    cdr_folder = os.environ.get("CDR_FOLDER", "").strip()
+    if not cdr_folder:
+        logging.error("CDR_FOLDER is not set")
+        return 2
+
     database.init_db()
 
     try:
-        cdr_folder, items = utils.get_files()
+        files = utils.get_files(cdr_folder)
     except Exception:
         logging.exception("Failed to get files")
-        return 2
+        return 1
 
-    logging.info("Starting CDR notify")
-    logging.info("Scanning folder: %s", cdr_folder)
-
-    for filename, full_path in items:
-        try:
-            file_hash = utils.calculate_hash(full_path)
-        except Exception:
-            logging.exception("Failed to calculate hash for %s", filename)
+    for full_path in files:
+        file_hash = utils.calculate_hash(full_path)
+        if not file_hash:
             continue
 
         if utils.get_hash(file_hash):
             continue
 
-        if not utils.send_email(full_path, filename=filename):
-            logging.error("Failed to send email for %s", filename)
+        if not utils.send_email(full_path):
             continue
 
+        filename = os.path.basename(full_path)
         utils.set_hash(filename, file_hash, utils.FileStatus.SENT)
         logging.info("File processed successfully: %s", filename)
 
