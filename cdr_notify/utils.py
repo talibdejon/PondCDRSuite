@@ -21,7 +21,6 @@ def get_files(cdr_folder: str) -> list[str]:
             for name in os.listdir(cdr_folder)
             if os.path.isfile(os.path.join(cdr_folder, name))
         ]
-
     except Exception:
         logging.exception("Failed to get files from CDR folder")
         return []
