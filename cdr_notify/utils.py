@@ -12,17 +12,28 @@ class FileStatus(Enum):
 
 
 _BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-_CONFIG_PATH = os.path.join(_BASE_DIR, "config", "config.txt")
-_RESOURCES_DIR = os.path.join(_BASE_DIR, "resources")
+
+CONFIG_PATH = os.path.normpath(os.path.join(_BASE_DIR, "..", "config", "config.txt"))
+TELEGRAM_ENV_PATH = os.path.join(_BASE_DIR, "secrets", "telegram.env")
+RESOURCES_DIR = os.path.join(_BASE_DIR, "resources")
 
 
 def load_config() -> dict[str, str]:
     config: dict[str, str] = {}
 
-    if not os.path.isfile(_CONFIG_PATH):
+    if not os.path.isfile(CONFIG_PATH):
         raise RuntimeError("config/config.txt not found")
 
-    with open(_CONFIG_PATH, "r", encoding="utf-8") as f:
+    _load_env_file(CONFIG_PATH, config)
+
+    if os.path.isfile(TELEGRAM_ENV_PATH):
+        _load_env_file(TELEGRAM_ENV_PATH, config)
+
+    return config
+
+
+def _load_env_file(path: str, config: dict[str, str]) -> None:
+    with open(path, "r", encoding="utf-8") as f:
         for raw_line in f:
             line = raw_line.strip()
             if not line or line.startswith("#") or "=" not in line:
@@ -30,18 +41,13 @@ def load_config() -> dict[str, str]:
 
             key, value = line.split("=", 1)
             key = key.strip()
-            value = value.strip()
-
-            if len(value) >= 2 and ((value[0] == value[-1] == '"') or (value[0] == value[-1] == "'")):
-                value = value[1:-1]
+            value = value.strip().strip("\"'")
 
             config[key] = value
 
-    return config
-
 
 def load_template(filename: str) -> str:
-    path = os.path.join(_RESOURCES_DIR, filename)
+    path = os.path.join(RESOURCES_DIR, filename)
     if not os.path.isfile(path):
         raise RuntimeError(f"Template not found: {filename}")
 
