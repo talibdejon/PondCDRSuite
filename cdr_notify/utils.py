@@ -58,9 +58,17 @@ def load_template(filename: str) -> str:
 def get_filename(full_path: str) -> str:
     return os.path.basename(full_path)
 
-
 def build_notification(full_path: str, changed: str = "") -> dict[str, str]:
     filename = get_filename(full_path)
+
+    if not changed:
+        try:
+            changed = datetime.fromtimestamp(os.path.getmtime(full_path)).strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
+        except Exception:
+            logging.exception("Failed to get mtime for %s", full_path)
+            changed = ""
 
     subject = load_template("email_subject.txt").format(filename=filename).strip()
     body = load_template("email_body.txt").format(
