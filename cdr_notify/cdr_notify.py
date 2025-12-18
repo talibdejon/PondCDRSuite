@@ -32,16 +32,21 @@ def main() -> None:
         if utils.get_hash(file_hash):
             continue
 
-        tg_ok = telegram_sender.send_message(full_path)
-        email_ok = email_sender.send_email(full_path)
+        email_send = config.get("EMAIL_SEND", "").strip()
+        telegram_send = config.get("TELEGRAM_SEND", "").strip()
+        if telegram_send:
+            telegram_send_status = telegram_sender.send_message(full_path)
+        if email_send:
+            email_send_status = email_sender.send_email(full_path)
 
-        if email_ok or tg_ok:
+
+        if email_send_status or telegram_send_status:
             utils.set_hash(full_path, file_hash, utils.FileStatus.SENT)
             logging.info(
                 "File processed successfully: %s (email=%s telegram=%s)",
                 utils.get_filename(full_path),
-                email_ok,
-                tg_ok,
+                email_send_status,
+                telegram_send_status,
             )
             sys.exit()
 
