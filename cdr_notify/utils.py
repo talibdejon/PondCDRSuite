@@ -2,7 +2,7 @@ import hashlib
 import logging
 import os
 from enum import Enum
-
+import datetime
 import database
 
 
@@ -63,9 +63,10 @@ def build_notification(full_path: str, changed: str = "") -> dict[str, str]:
 
     if not changed:
         try:
-            changed = datetime.fromtimestamp(os.path.getmtime(full_path)).strftime(
+            changed = datetime.datetime.fromtimestamp(os.path.getmtime(full_path)).strftime(
                 "%Y-%m-%d %H:%M:%S"
             )
+
         except Exception:
             logging.exception("Failed to get mtime for %s", full_path)
             changed = ""
