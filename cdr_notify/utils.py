@@ -82,11 +82,11 @@ def get_files(cdr_folder: str) -> list[str]:
             raise RuntimeError(f"CDR_FOLDER does not exist: {cdr_folder}")
 
         else:
-
             for name in os.listdir(cdr_folder):
-                if os.path.isfile(os.path.join(cdr_folder, name)):
-                    file_list.append(name)
-        return file_list
+                full_path = os.path.join(cdr_folder, name)
+                if os.path.isfile(full_path)):
+                    file_list.append(full_path)
+            return file_list
 
 
     except Exception:
