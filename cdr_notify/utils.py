@@ -1,14 +1,17 @@
+import datetime
 import hashlib
 import logging
 import os
 from enum import Enum
-import datetime
+
 import database
 
 
 class FileStatus(Enum):
     ARRIVED = "ARRIVED"
     SENT = "SENT"
+    FAILED = "FAILED"
+    SKIPPED = "SKIPPED"
 
 
 _BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -58,20 +61,26 @@ def load_template(filename: str) -> str:
 def get_filename(full_path: str) -> str:
     return os.path.basename(full_path)
 
+
 def build_notification(full_path: str, changed: str = "") -> dict[str, str]:
     filename = get_filename(full_path)
 
     if not changed:
         try:
-            changed = datetime.datetime.fromtimestamp(os.path.getmtime(full_path)).strftime("%Y-%m-%d %H:%M:%S")
+            changed = datetime.datetime.fromtimestamp(os.path.getmtime(full_path)).strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
         except Exception:
             logging.exception("Failed to get mtime for %s", full_path)
             changed = ""
 
     subject = load_template("email_subject.txt").format(filename=filename).strip()
-    body = load_template("email_body.txt").format(
-        filename=filename, changed=changed
-    ).rstrip() + "\n"
+    body = (
+        load_template("email_body.txt")
+        .format(filename=filename, changed=changed)
+        .rstrip()
+        + "\n"
+    )
 
     return {
         "filename": filename,
@@ -82,19 +91,19 @@ def build_notification(full_path: str, changed: str = "") -> dict[str, str]:
 
 
 def get_files(cdr_folder: str) -> list[str]:
-    file_list = []
+    file_list: list[str] = []
     try:
         if not os.path.isdir(cdr_folder):
             raise RuntimeError(f"CDR_FOLDER does not exist: {cdr_folder}")
 
-        else:
-            for name in os.listdir(cdr_folder):
-                full_path = os.path.join(cdr_folder, name)
-                if os.path.isfile(full_path):
-                    file_list.append(full_path)
-            return file_list
+        for name in os.listdir(cdr_folder):
+            if name.startswith("."):
+                continue
+            full_path = os.path.join(cdr_folder, name)
+            if os.path.isfile(full_path):
+                file_list.append(full_path)
 
-
+        return file_list
     except Exception:
         logging.exception("Failed to get files from CDR folder: %s", cdr_folder)
         return []
@@ -103,24 +112,38 @@ def get_files(cdr_folder: str) -> list[str]:
 def calculate_hash(filepath: str) -> str | None:
     try:
         with open(filepath, "rb") as f:
-            return hashlib.sha256(filepath+f.read()).hexdigest()
+            data = f.read()
+
+        h = hashlib.sha256()
+        h.update(filepath.encode("utf-8"))
+        h.update(b"\x00")
+        h.update(data)
+        return h.hexdigest()
     except Exception:
         logging.exception("Failed to calculate hash for %s", filepath)
         return None
 
 
-def get_hash(file_hash: str) -> bool:
+def is_known_file(full_path: str) -> bool:
     try:
-        return database.get_file_by_hash(file_hash) is not None
+        return database.get_file_by_path(full_path) is not None
     except Exception:
-        logging.exception("Database read error for hash %s", file_hash)
+        logging.exception("Database read error for path %s", full_path)
         return False
 
 
-def set_hash(full_path: str, file_hash: str, status: FileStatus) -> bool:
+def insert_file_record(full_path: str, file_hash: str, status: FileStatus, last_error: str = "") -> bool:
     filename = get_filename(full_path)
     try:
-        return database.insert_file(filename, file_hash, status.value)
+        return database.insert_file(full_path, filename, file_hash, status.value, last_error)
     except Exception:
-        logging.exception("Database insert error for %s (%s)", filename, file_hash)
+        logging.exception("Database insert error for %s (%s)", filename, full_path)
+        return False
+
+
+def update_file_status(full_path: str, status: FileStatus, last_error: str = "") -> bool:
+    try:
+        return database.update_status(full_path, status.value, last_error)
+    except Exception:
+        logging.exception("Database update error for %s", full_path)
         return False
