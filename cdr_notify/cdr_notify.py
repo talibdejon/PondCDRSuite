@@ -23,7 +23,6 @@ def main() -> None:
     logging.info("Starting CDR notify service")
 
     files = utils.get_files(cdr_folder)
-
     for full_path in files:
         file_hash = utils.calculate_hash(full_path)
         if not file_hash:
@@ -34,9 +33,16 @@ def main() -> None:
 
         email_send = config.get("EMAIL_SEND", "").strip()
         telegram_send = config.get("TELEGRAM_SEND", "").strip()
-        if telegram_send:
+
+        email_send_status = False
+        telegram_send_status = False
+
+        if telegram_send == "True":
             telegram_send_status = telegram_sender.send_message(full_path)
-        if email_send:
+            #TODO Remove after debug
+            print("Telegram send status=", telegram_send_status)
+            #
+        if email_send == "True":
             email_send_status = email_sender.send_email(full_path)
 
 
@@ -55,3 +61,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+    
