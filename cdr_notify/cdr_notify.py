@@ -1,3 +1,5 @@
+# cdr_notify.py
+
 import logging
 import os
 
@@ -40,12 +42,14 @@ def main() -> None:
             logging.error("Failed to calculate hash for %s", full_path)
             continue
 
-        utils.insert_file_record(full_path, file_hash, utils.FileStatus.ARRIVED, "")
+        email_ok = email_sender.send_email(full_path)
+        telegram_ok = telegram_sender.send_message(full_path)
 
-        telegram_sender.send_message(full_path)
-        email_sender.send_email(full_path)
+        if not (email_ok and telegram_ok):
+            logging.error("Failed to send notifications for %s", utils.get_filename(full_path))
+            continue
 
-        utils.update_file_status(full_path, utils.FileStatus.SENT, "")
+        utils.insert_file_record(full_path, file_hash, utils.FileStatus.SENT)
         logging.info("File processed successfully: %s", utils.get_filename(full_path))
 
     if not found_new_files:

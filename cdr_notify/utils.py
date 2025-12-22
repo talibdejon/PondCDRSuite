@@ -1,3 +1,6 @@
+# utils.py
+
+import datetime
 import hashlib
 import logging
 import os
@@ -7,7 +10,6 @@ import database
 
 
 class FileStatus(Enum):
-    ARRIVED = "ARRIVED"
     SENT = "SENT"
 
 
@@ -16,6 +18,10 @@ _BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.path.normpath(os.path.join(_BASE_DIR, "config", "config.txt"))
 TELEGRAM_ENV_PATH = os.path.join(_BASE_DIR, "secrets", "telegram.env")
 RESOURCES_DIR = os.path.join(_BASE_DIR, "resources")
+
+
+def is_enabled(value: str) -> bool:
+    return value.strip().lower() in {"1", "true", "yes", "y", "on"}
 
 
 def load_config() -> dict[str, str]:
@@ -56,6 +62,26 @@ def get_filename(full_path: str) -> str:
     return os.path.basename(full_path)
 
 
+def build_notification(full_path: str) -> dict[str, str]:
+    filename = get_filename(full_path)
+
+    changed = ""
+    try:
+        changed = datetime.datetime.fromtimestamp(os.path.getmtime(full_path)).strftime("%Y-%m-%d %H:%M:%S")
+    except Exception:
+        logging.exception("Failed to get mtime for %s", full_path)
+
+    subject = load_template("email_subject.txt").format(filename=filename).strip()
+    body = load_template("email_body.txt").format(filename=filename, changed=changed).rstrip() + "\n"
+
+    return {
+        "filename": filename,
+        "subject": subject,
+        "body": body,
+        "telegram_text": body,
+    }
+
+
 def get_files(cdr_folder: str) -> list[str]:
     try:
         if not os.path.isdir(cdr_folder):
@@ -82,50 +108,25 @@ def calculate_hash(filepath: str) -> str | None:
     try:
         with open(filepath, "rb") as f:
             content = f.read()
-
         return hashlib.sha256(filepath.encode("utf-8") + content).hexdigest()
-
     except Exception:
         logging.exception("Failed to calculate hash for %s", filepath)
         return None
 
 
 def is_known_file(full_path: str) -> bool:
-    try:
-        return database.get_file_by_path(full_path) is not None
-    except Exception:
-        logging.exception("Database read error for path %s", full_path)
-        return False
-
-
-def insert_file_record(
-    full_path: str,
-    file_hash: str,
-    status: FileStatus,
-) -> bool:
     filename = get_filename(full_path)
-
     try:
-        return database.insert_file(
-            full_path=full_path,
-            filename=filename,
-            file_hash=file_hash,
-            status=status.value,
-        )
+        return database.get_file_by_filename(filename) is not None
     except Exception:
-        logging.exception("Database insert error for %s", full_path)
+        logging.exception("Database read error for filename %s", filename)
         return False
 
 
-def update_file_status(
-    full_path: str,
-    status: FileStatus,
-) -> bool:
+def insert_file_record(full_path: str, file_hash: str, status: FileStatus) -> bool:
+    filename = get_filename(full_path)
     try:
-        return database.update_status(
-            full_path=full_path,
-            status=status.value,
-        )
+        return database.insert_file(filename, file_hash, status.value)
     except Exception:
-        logging.exception("Database update error for %s", full_path)
+        logging.exception("Database insert error for %s", filename)
         return False

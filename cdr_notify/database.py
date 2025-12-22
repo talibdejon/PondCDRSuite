@@ -1,3 +1,4 @@
+
 import logging
 import os
 import sqlite3
@@ -34,10 +35,7 @@ def get_file_by_filename(filename: str) -> Optional[tuple]:
     try:
         with get_connection() as conn:
             cur = conn.cursor()
-            cur.execute(
-                "SELECT * FROM cdr_files WHERE filename = ?",
-                (filename,),
-            )
+            cur.execute("SELECT * FROM cdr_files WHERE filename = ?", (filename,))
             return cur.fetchone()
     except Exception:
         logging.exception("Database read error for filename %s", filename)
@@ -49,33 +47,11 @@ def insert_file(filename: str, file_hash: str, status: str) -> bool:
         with get_connection() as conn:
             cur = conn.cursor()
             cur.execute(
-                """
-                INSERT INTO cdr_files (filename, file_hash, status)
-                VALUES (?, ?, ?)
-                """,
+                "INSERT INTO cdr_files (filename, file_hash, status) VALUES (?, ?, ?)",
                 (filename, file_hash, status),
             )
             conn.commit()
             return True
     except Exception:
         logging.exception("Failed to insert file into database: %s", filename)
-        return False
-
-
-def update_status(filename: str, status: str) -> bool:
-    try:
-        with get_connection() as conn:
-            cur = conn.cursor()
-            cur.execute(
-                """
-                UPDATE cdr_files
-                SET status = ?, changed = CURRENT_TIMESTAMP
-                WHERE filename = ?
-                """,
-                (status, filename),
-            )
-            conn.commit()
-            return True
-    except Exception:
-        logging.exception("Failed to update status for filename %s", filename)
         return False
